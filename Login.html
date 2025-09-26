@@ -184,9 +184,15 @@
           if (data.success) {
             showMessage("Inloggning lyckades! ✅", "success");
 
+            //Lägger till token i localStorage
+            localStorage.setItem("authToken", data.token);
+
             // Visa JWT token
             tokenDiv.textContent = data.token;
             tokenDisplay.style.display = "block";
+            setTimeout(() => {
+        window.location.href = 'Virtual-board.html';
+    }, 1500);
 
             // Rensa formulär
             loginForm.reset();
