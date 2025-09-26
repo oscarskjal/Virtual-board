@@ -7,11 +7,18 @@
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <div id="board-container">
+  <div id="board-container">
+    <div class="header">
       <h1>Virtual Board</h1>
-      <button id="add-postit-btn">Add Post-it</button>
-      <div id="board" class="board"></div>
+      <button id="logout-btn">Logout</button>
     </div>
-    <script src="board.js"></script>
-  </body>
+    <div class="button-row">
+      <button id="select-board-btn">Select board</button>
+      <button id="add-postit-btn">Add Post-it</button>
+      <button id="clear-board-btn">Clear Board</button>
+    </div>
+    <div id="board" class="board"></div>
+  </div>
+  <script src="board.js"></script>
+</body>
 </html>
