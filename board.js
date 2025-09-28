@@ -1,4 +1,4 @@
-const LOGIN_API = "http://localhost:3000";
+const LOGIN_API = "https://login-api-fwaw.onrender.com/api/auth/login";
 const WHITEBOARD_API = "http://localhost:3002";
 
 let currentBoardId = null;
@@ -50,37 +50,15 @@ document.addEventListener("DOMContentLoaded", function () {
     };
   }
 
-  const selectBoardBtn = document.getElementById("select-board-btn");
   const boardSelect = document.getElementById("board-select");
-  if (selectBoardBtn && boardSelect) {
-    selectBoardBtn.onclick = async () => {
-      const token = localStorage.getItem("authToken");
-      const res = await fetch(`${WHITEBOARD_API}/api/boards`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const boards = await res.json();
-        boardSelect.innerHTML = "";
-        boards.forEach((board) => {
-          const option = document.createElement("option");
-          option.value = board.id;
-          option.textContent = board.name;
-          if (board.id === currentBoardId) option.selected = true;
-          boardSelect.appendChild(option);
-        });
-        boardSelect.style.display = "inline-block";
-        boardSelect.focus();
-      }
-    };
+  if (boardSelect) {
+    boardSelect.style.display = "inline-block";
+    loadBoardsToDropdown();
 
     boardSelect.onchange = () => {
       currentBoardId = boardSelect.value;
+      document.querySelectorAll(".postit").forEach((p) => p.remove());
       loadPostIts(localStorage.getItem("authToken"));
-      boardSelect.style.display = "none";
-    };
-
-    boardSelect.onblur = () => {
-      setTimeout(() => (boardSelect.style.display = "none"), 200);
     };
   }
 
@@ -107,11 +85,10 @@ document.addEventListener("DOMContentLoaded", function () {
         if (res.ok) {
           const newBoard = await res.json();
           currentBoardId = newBoard.id;
+          document.querySelectorAll(".postit").forEach((p) => p.remove());
+          await loadBoardsToDropdown();
+          boardSelect.value = currentBoardId;
           loadPostIts(token);
-          const boardSelect = document.getElementById("board-select");
-          if (boardSelect && boardSelect.style.display !== "none") {
-            document.getElementById("select-board-btn").click();
-          }
         } else {
           const err = await res.json();
           alert("Failed to create board: " + (err.error || "Unknown error"));
@@ -122,6 +99,32 @@ document.addEventListener("DOMContentLoaded", function () {
     };
   }
 });
+
+async function loadBoardsToDropdown() {
+  const boardSelect = document.getElementById("board-select");
+  const token = localStorage.getItem("authToken");
+  if (!boardSelect || !token) return;
+  const res = await fetch(`${WHITEBOARD_API}/api/boards`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.ok) {
+    const boards = await res.json();
+    boardSelect.innerHTML = "";
+    boards.forEach((board) => {
+      const option = document.createElement("option");
+      option.value = board.id;
+      option.textContent = board.name;
+      if (board.id === currentBoardId) option.selected = true;
+      boardSelect.appendChild(option);
+    });
+    // If no board selected, select the first one
+    if (!currentBoardId && boards.length > 0) {
+      currentBoardId = boards[0].id;
+      boardSelect.value = currentBoardId;
+      loadPostIts(token);
+    }
+  }
+}
 
 function checkAuthentication() {
   const token = localStorage.getItem("authToken");
@@ -391,7 +394,9 @@ async function loadPostIts(token) {
 
     if (response.ok) {
       const data = await response.json();
-      const postits = data.postits || data;
+      const postits = (data.postits || data).filter(
+        (p) => String(p.boardId) === String(currentBoardId)
+      );
       document.querySelectorAll(".postit").forEach((p) => p.remove());
       postits.forEach((postit) => createVisualPostIt(postit));
     } else {
