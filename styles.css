@@ -16,13 +16,73 @@ body {
   align-items: center;
   margin-bottom: 20px;
 }
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
 
 .header h1 {
   margin: 0;
 }
 
+.controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 10px 20px;
+}
+
 .button-row {
+  display: flex;
+  gap: 10px;
+}
+
+#board-select {
+  padding: 8px 12px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 15px;
+}
+#new-board-btn {
+  background-color: #ffb300;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
   margin-bottom: 20px;
+}
+#new-board-btn:hover {
+  background-color: #ffa000;
+}
+
+.trash-can {
+  padding: 0px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.trash-can:hover {
+  background: #ffebee;
+  transform: scale(1.1);
+}
+
+.trash-can.drag-over {
+  background: #ffcdd2;
+  transform: scale(1.2);
+}
+
+.trash-can svg {
+  display: block;
+}
+
+.trash-can:hover svg path {
+  stroke: #d32f2f;
 }
 
 #logout-btn {

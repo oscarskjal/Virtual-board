@@ -2,11 +2,124 @@ const LOGIN_API = "http://localhost:3000";
 const WHITEBOARD_API = "http://localhost:3002";
 
 let currentBoardId = null;
+let draggedElement = null;
 
 document.addEventListener("DOMContentLoaded", function () {
   const token = checkAuthentication();
   if (token) {
     initializeBoard(token);
+  }
+
+  const board = document.getElementById("board");
+  if (board) {
+    board.ondragover = (e) => e.preventDefault();
+    board.ondrop = (e) => {
+      e.preventDefault();
+      if (draggedElement) {
+        const rect = board.getBoundingClientRect();
+        const newX = e.clientX - rect.left - 75;
+        const newY = e.clientY - rect.top - 50;
+        draggedElement.style.left = newX + "px";
+        draggedElement.style.top = newY + "px";
+        const postItId = draggedElement.dataset.id;
+        if (postItId) {
+          updatePostItPosition(postItId, newX, newY);
+        }
+      }
+    };
+  }
+
+  const trashCan = document.getElementById("trash-can");
+  if (trashCan) {
+    trashCan.ondragover = (e) => {
+      e.preventDefault();
+      trashCan.classList.add("drag-over");
+    };
+    trashCan.ondragleave = () => {
+      trashCan.classList.remove("drag-over");
+    };
+    trashCan.ondrop = (e) => {
+      e.preventDefault();
+      trashCan.classList.remove("drag-over");
+      if (draggedElement) {
+        const postItId = draggedElement.dataset.id;
+        if (postItId) {
+          deletePostIt(postItId, draggedElement);
+        }
+      }
+    };
+  }
+
+  const selectBoardBtn = document.getElementById("select-board-btn");
+  const boardSelect = document.getElementById("board-select");
+  if (selectBoardBtn && boardSelect) {
+    selectBoardBtn.onclick = async () => {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch(`${WHITEBOARD_API}/api/boards`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const boards = await res.json();
+        boardSelect.innerHTML = "";
+        boards.forEach((board) => {
+          const option = document.createElement("option");
+          option.value = board.id;
+          option.textContent = board.name;
+          if (board.id === currentBoardId) option.selected = true;
+          boardSelect.appendChild(option);
+        });
+        boardSelect.style.display = "inline-block";
+        boardSelect.focus();
+      }
+    };
+
+    boardSelect.onchange = () => {
+      currentBoardId = boardSelect.value;
+      loadPostIts(localStorage.getItem("authToken"));
+      boardSelect.style.display = "none";
+    };
+
+    boardSelect.onblur = () => {
+      setTimeout(() => (boardSelect.style.display = "none"), 200);
+    };
+  }
+
+  const newBoardBtn = document.getElementById("new-board-btn");
+  if (newBoardBtn) {
+    newBoardBtn.onclick = async () => {
+      const name = prompt("Enter board name:");
+      if (!name) return;
+      const description = prompt("Enter board description (optional):") || "";
+      const token = localStorage.getItem("authToken");
+      try {
+        const res = await fetch(`${WHITEBOARD_API}/api/boards`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name,
+            description,
+            isPublic: false,
+          }),
+        });
+        if (res.ok) {
+          const newBoard = await res.json();
+          currentBoardId = newBoard.id;
+          loadPostIts(token);
+          const boardSelect = document.getElementById("board-select");
+          if (boardSelect && boardSelect.style.display !== "none") {
+            document.getElementById("select-board-btn").click();
+          }
+        } else {
+          const err = await res.json();
+          alert("Failed to create board: " + (err.error || "Unknown error"));
+        }
+      } catch (error) {
+        alert("Error creating board: " + error.message);
+      }
+    };
   }
 });
 
@@ -22,29 +135,22 @@ function checkAuthentication() {
 
 async function initializeBoard(token) {
   await getOrCreateBoard(token);
-
   loadPostIts(token);
-
   document.getElementById("add-postit-btn").onclick = () => createPostIt(token);
   document.getElementById("logout-btn").onclick = logout;
 }
 
-// GET OR CREATE A DEFAULT BOARD
 async function getOrCreateBoard(token) {
   try {
-    // Get existing boards
     const response = await fetch(`${WHITEBOARD_API}/api/boards`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
     if (response.ok) {
       const boards = await response.json();
-
       if (boards.length > 0) {
-        // Use first existing board
         currentBoardId = boards[0].id;
       } else {
-        // Create a default board
         const createResponse = await fetch(`${WHITEBOARD_API}/api/boards`, {
           method: "POST",
           headers: {
@@ -69,20 +175,144 @@ async function getOrCreateBoard(token) {
   }
 }
 
-// CREATE POST-IT
-async function createPostIt(token) {
-  const text = prompt("Enter post-it text:");
-  if (!text || !currentBoardId) return;
+function createPostItModal(token, isEdit = false, postItData = null) {
+  if (!currentBoardId && !isEdit) return;
 
-  // Random position
-  const xPosition = Math.floor(Math.random() * 300 + 50);
-  const yPosition = Math.floor(Math.random() * 300 + 100);
+  const modal = document.createElement("div");
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); display: flex; justify-content: center;
+    align-items: center; z-index: 1000;
+  `;
+
+  const editor = document.createElement("div");
+  const initialColor = isEdit ? postItData.color : "#ffff88";
+  editor.style.cssText = `
+    background: ${initialColor}; width: 300px; height: 200px; border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3); position: relative;
+    display: flex; flex-direction: column; padding: 20px;
+  `;
+
+  let selectedColor = initialColor;
+
+  const textarea = document.createElement("textarea");
+  textarea.style.cssText = `
+    background: transparent; border: none; resize: none; font-size: 16px;
+    flex: 1; outline: none; font-family: sans-serif;
+  `;
+  textarea.placeholder = "Write your note...";
+  if (isEdit) {
+    textarea.value = postItData.content;
+  }
+
+  const colors = [
+    "#ffff88",
+    "#75be78",
+    "#65a6db",
+    "#cda76f",
+    "#da7194",
+    "#b35ec3",
+  ];
+  const colorPicker = document.createElement("div");
+  colorPicker.style.cssText = "display: flex; gap: 10px; margin: 10px 0;";
+
+  colors.forEach((color) => {
+    const colorBtn = document.createElement("div");
+    const isSelected = color === selectedColor;
+    colorBtn.style.cssText = `
+      width: 30px; height: 30px; background: ${color}; border-radius: 50%;
+      cursor: pointer; border: ${
+        isSelected ? "2px solid #333" : "2px solid transparent"
+      };
+    `;
+    colorBtn.onclick = () => {
+      selectedColor = color;
+      editor.style.background = color;
+      colorPicker
+        .querySelectorAll("div")
+        .forEach((btn) => (btn.style.border = "2px solid transparent"));
+      colorBtn.style.border = "2px solid #333";
+    };
+    colorPicker.appendChild(colorBtn);
+  });
+
+  const buttons = document.createElement("div");
+  buttons.style.cssText =
+    "display: flex; gap: 10px; justify-content: flex-end;";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.textContent = isEdit ? "Update" : "Save";
+  saveBtn.style.cssText = "padding: 8px 16px; cursor: pointer;";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.style.cssText = "padding: 8px 16px; cursor: pointer;";
+
+  saveBtn.onclick = () => {
+    if (isEdit) {
+      updatePostIt(
+        token,
+        postItData.id,
+        textarea.value,
+        selectedColor,
+        modal,
+        postItData.element
+      );
+    } else {
+      savePostIt(token, textarea.value, selectedColor, modal);
+    }
+  };
+  cancelBtn.onclick = () => document.body.removeChild(modal);
+  modal.onclick = (e) => e.target === modal && document.body.removeChild(modal);
+
+  editor.appendChild(textarea);
+  editor.appendChild(colorPicker);
+  buttons.appendChild(cancelBtn);
+  buttons.appendChild(saveBtn);
+  editor.appendChild(buttons);
+  modal.appendChild(editor);
+  document.body.appendChild(modal);
+  textarea.focus();
+}
+
+function createPostIt(token) {
+  createPostItModal(token, false);
+}
+
+function editPostIt(token, postItElement) {
+  const postItData = {
+    id: postItElement.dataset.id,
+    content: postItElement.textContent,
+    color: postItElement.style.backgroundColor || "#ffff88",
+    element: postItElement,
+  };
+
+  if (postItData.color.startsWith("rgb")) {
+    postItData.color = rgbToHex(postItData.color);
+  }
+
+  createPostItModal(token, true, postItData);
+}
+
+function rgbToHex(rgb) {
+  const result = rgb.match(/\d+/g);
+  if (result && result.length >= 3) {
+    const r = parseInt(result[0]).toString(16).padStart(2, "0");
+    const g = parseInt(result[1]).toString(16).padStart(2, "0");
+    const b = parseInt(result[2]).toString(16).padStart(2, "0");
+    return `#${r}${g}${b}`;
+  }
+  return "#ffff88";
+}
+
+async function savePostIt(token, text, color, modal) {
+  if (!text.trim()) return;
 
   const postItData = {
     content: text,
-    xPosition: xPosition,
-    yPosition: yPosition,
-    color: "#ffeb3b",
+    xPosition: Math.floor(Math.random() * 300 + 50),
+    yPosition: Math.floor(Math.random() * 300 + 100),
+    color: color || "#ffff88",
     boardId: currentBoardId,
   };
 
@@ -99,13 +329,57 @@ async function createPostIt(token) {
     if (response.ok) {
       const savedPostIt = await response.json();
       createVisualPostIt(savedPostIt);
+      document.body.removeChild(modal);
     } else {
-      const error = await response.json();
-      alert("Failed to save post-it: " + (error.error || "Unknown error"));
+      const errorData = await response.json();
+      console.error("Failed to save post-it:", errorData);
+      alert("Failed to save post-it: " + (errorData.error || "Unknown error"));
     }
   } catch (error) {
     console.error("Error saving post-it:", error);
-    alert("Error connecting to API");
+    alert("Error saving post-it: " + error.message);
+  }
+}
+
+async function updatePostIt(
+  token,
+  postItId,
+  text,
+  color,
+  modal,
+  postItElement
+) {
+  if (!text.trim()) return;
+
+  const updateData = {
+    content: text,
+    color: color || "#ffff88",
+  };
+
+  try {
+    const response = await fetch(`${WHITEBOARD_API}/api/postits/${postItId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(updateData),
+    });
+
+    if (response.ok) {
+      postItElement.textContent = text;
+      postItElement.style.background = color;
+      document.body.removeChild(modal);
+    } else {
+      const errorData = await response.json();
+      console.error("Failed to update post-it:", errorData);
+      alert(
+        "Failed to update post-it: " + (errorData.error || "Unknown error")
+      );
+    }
+  } catch (error) {
+    console.error("Error updating post-it:", error);
+    alert("Error updating post-it: " + error.message);
   }
 }
 
@@ -118,29 +392,94 @@ async function loadPostIts(token) {
     if (response.ok) {
       const data = await response.json();
       const postits = data.postits || data;
+      document.querySelectorAll(".postit").forEach((p) => p.remove());
       postits.forEach((postit) => createVisualPostIt(postit));
+    } else {
+      console.error("Failed to load post-its:", response.status);
     }
   } catch (error) {
     console.error("Error loading post-its:", error);
   }
 }
 
-// CREATE VISUAL POST-IT
 function createVisualPostIt(postItData) {
+  const token = localStorage.getItem("authToken");
   const postit = document.createElement("div");
   postit.className = "postit";
   postit.textContent = postItData.content;
-  postit.style.position = "absolute";
-  postit.style.left = postItData.xPosition + "px";
-  postit.style.top = postItData.yPosition + "px";
-  postit.style.background = postItData.color || "#ffeb3b";
-  postit.style.padding = "10px";
-  postit.style.width = "150px";
-  postit.style.minHeight = "100px";
-  postit.style.borderRadius = "5px";
-  postit.style.boxShadow = "2px 2px 5px rgba(0,0,0,0.2)";
+  postit.draggable = true;
+  postit.dataset.id = postItData.id;
+  postit.style.cssText = `
+    position: absolute; left: ${postItData.xPosition}px; top: ${
+    postItData.yPosition
+  }px;
+    background: ${postItData.color || "#ffff88"}; padding: 15px; width: 150px;
+    min-height: 100px; border-radius: 8px; box-shadow: 3px 3px 10px rgba(0,0,0,0.2);
+    cursor: move; user-select: none; font-family: sans-serif; word-wrap: break-word;
+  `;
+
+  postit.ondragstart = (e) => {
+    draggedElement = postit;
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  postit.ondragend = () => (draggedElement = null);
+
+  postit.ondblclick = (e) => {
+    e.preventDefault();
+    editPostIt(token, postit);
+  };
 
   document.getElementById("board").appendChild(postit);
+}
+
+async function updatePostItPosition(postItId, xPosition, yPosition) {
+  const token = localStorage.getItem("authToken");
+  if (!token || !postItId) return;
+
+  try {
+    const response = await fetch(`${WHITEBOARD_API}/api/postits/${postItId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        xPosition: parseInt(xPosition),
+        yPosition: parseInt(yPosition),
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Failed to update position:", response.status);
+    }
+  } catch (error) {
+    console.error("Error updating position:", error);
+  }
+}
+
+async function deletePostIt(postItId, postItElement) {
+  const token = localStorage.getItem("authToken");
+  if (!token || !postItId) return;
+
+  try {
+    const response = await fetch(`${WHITEBOARD_API}/api/postits/${postItId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (response.ok) {
+      postItElement.remove();
+    } else {
+      console.error("Failed to delete post-it:", response.status);
+      alert("Failed to delete post-it");
+    }
+  } catch (error) {
+    console.error("Error deleting post-it:", error);
+    alert("Error deleting post-it: " + error.message);
+  }
 }
 
 function logout() {
