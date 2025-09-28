@@ -1,4 +1,5 @@
-const API_URL = `${config.API_BASE_URL}/api/auth/login`;
+const API_URL = "https://login-api-fwaw.onrender.com/api/auth/login";
+// const API_URL = "http://localhost:3000/api/auth/login";
 
 const loginForm = document.getElementById("loginForm");
 const loginBtn = document.getElementById("loginBtn");
