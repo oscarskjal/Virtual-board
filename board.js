@@ -1,5 +1,5 @@
 const LOGIN_API = "https://login-api-fwaw.onrender.com/api/auth/login";
-const WHITEBOARD_API = "https://project1-part2-1.onrender.com/api/whiteboard";
+const WHITEBOARD_API = "https://project1-part2-1.onrender.com";
 
 let currentBoardId = null;
 let draggedElement = null;
