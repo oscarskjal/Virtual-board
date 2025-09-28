@@ -9,6 +9,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
   if (token) {
     initializeBoard(token);
+
+    // Auto-refresh post-its every 3 seconds
+    setInterval(() => {
+      if (currentBoardId) {
+        loadPostIts(token);
+      }
+    }, 4000);
   }
 
   const board = document.getElementById("board");
