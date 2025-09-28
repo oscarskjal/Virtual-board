@@ -1,11 +1,12 @@
 const LOGIN_API = "https://login-api-fwaw.onrender.com/api/auth/login";
-const WHITEBOARD_API = "http://localhost:3002";
+const WHITEBOARD_API = "https://project1-part2-1.onrender.com/api/whiteboard";
 
 let currentBoardId = null;
 let draggedElement = null;
 
 document.addEventListener("DOMContentLoaded", function () {
   const token = checkAuthentication();
+
   if (token) {
     initializeBoard(token);
   }
