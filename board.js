@@ -138,7 +138,7 @@ function checkAuthentication() {
   const token = localStorage.getItem("authToken");
   if (!token) {
     alert("Please login first!");
-    window.location.href = "Login.html";
+    window.location.href = "index.html";
     return null;
   }
   return token;
@@ -497,5 +497,5 @@ async function deletePostIt(postItId, postItElement) {
 
 function logout() {
   localStorage.removeItem("authToken");
-  window.location.href = "Login.html";
+  window.location.href = "index.html";
 }
